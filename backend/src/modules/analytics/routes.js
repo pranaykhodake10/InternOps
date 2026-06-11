@@ -1,4 +1,5 @@
-﻿const auth = require('../../middleware/auth');
+﻿const { z } = require('zod');
+const auth = require('../../middleware/auth');
 const rbac = require('../../middleware/rbac');
 const repo = require('./repository');
 
@@ -18,13 +19,18 @@ async function routes(fastify) {
 
   // Top performers
   fastify.get('/top-performers', { preHandler: [auth, rbac('ADMIN','SENIOR_TL','TL')] }, async (req) => {
-    const { role = 'INTERN', limit = 10 } = req.query;
+    const { role, limit } = z.object({
+      role: z.enum(['ADMIN','SENIOR_TL','TL','CAPTAIN','INTERN']).default('INTERN'),
+      limit: z.coerce.number().int().min(1).max(50).default(10),
+    }).parse(req.query);
     return repo.topPerformers(role, limit);
   });
 
   // Attendance trends
   fastify.get('/attendance-trends', { preHandler: [auth, rbac('ADMIN','SENIOR_TL')] }, async (req) => {
-    const { months = 6 } = req.query;
+    const { months } = z.object({
+      months: z.coerce.number().int().min(1).max(24).default(6),
+    }).parse(req.query);
     return repo.attendanceTrends(months);
   });
 }
