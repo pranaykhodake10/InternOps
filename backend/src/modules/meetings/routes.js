@@ -129,6 +129,17 @@ async function routes(fastify) {
     '/:id',
     { preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL')] },
     async (req, reply) => {
+
+       const schema = z.object({
+        title: z.string().min(3).optional(),
+        description: z.string().optional(),
+        meeting_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        start_time: z.string().optional(),
+        end_time: z.string().optional(),
+      }).strict(); //strict() ensure ki koie unknown fields na jaaye
+
+      const data = schema.parse(req.body);
+
       const meeting = await repo.getMeetingById(req.params.id);
       if (!meeting) return reply.status(404).send({ error: 'Not found' });
       if (meeting.created_by !== req.user.id && req.user.role !== 'ADMIN') {
@@ -136,7 +147,8 @@ async function routes(fastify) {
           .status(403)
           .send({ error: 'Only creator or admin can update' });
       }
-      const updated = await repo.updateMeeting(req.params.id, req.body);
+      const updated = await repo.updateMeeting(req.params.id, data);
+      if (!updated) return reply.status(400).send({ error: 'No valid fields provided' });
       return updated;
     }
   );
