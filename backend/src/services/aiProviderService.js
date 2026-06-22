@@ -86,10 +86,10 @@ function getProviderOrder() {
     .filter(Boolean);
 }
 
-function getCacheKey(userId, messages) {
+function getCacheKey(payload) {
   return crypto
     .createHash('sha256')
-    .update(JSON.stringify({ userId, messages }))
+    .update(JSON.stringify(payload))
     .digest('hex');
 }
 
@@ -208,8 +208,17 @@ async function readResponseTextWithLimit(response) {
   }
 
   if (!response.body || typeof response.body.getReader !== 'function') {
-    // Fallback for Jest/Node environments that lack getReader()
-    const text = await response.text();
+    // Fallback for Jest/Node environments that lack getReader() and text()
+    let text;
+    if (typeof response.text === 'function') {
+      text = await response.text();
+    } else if (typeof response.json === 'function') {
+      const data = await response.json();
+      text = typeof data === 'string' ? data : JSON.stringify(data);
+    } else {
+      text = String(response.body || '');
+    }
+
     if (Buffer.byteLength(text, 'utf8') > MAX_AI_RESPONSE_BYTES) {
       throw new ResponseSizeLimitError(
         `AI provider response exceeded ${MAX_AI_RESPONSE_BYTES} bytes`
