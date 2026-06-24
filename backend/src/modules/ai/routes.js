@@ -11,7 +11,7 @@ async function routes(fastify) {
   fastify.post(
     '/chat',
     {
-      preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL', 'CAPTAIN')],
+      preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL')],
       bodyLimit: 10485760,
       config: {
         rateLimit: {
