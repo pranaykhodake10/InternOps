@@ -57,7 +57,7 @@ async function routes(fastify) {
       }
 
       // Buffer the upload to validate contents, then persist
-     
+
       // Authorization: the intern must actually be assigned to the task
       const isAssigned = await repo.isTaskAssignedToUser(task_id, req.user.id);
       if (!isAssigned) {
@@ -75,24 +75,24 @@ async function routes(fastify) {
         config.uploadDir
       );
       await fs.promises.mkdir(absoluteUploadDir, { recursive: true });
-    const uploadPath = path.join(absoluteUploadDir, filename);
+      const uploadPath = path.join(absoluteUploadDir, filename);
 
-const firstChunk = await data.file.read(16);
+      const firstChunk = await data.file.read(16);
 
-const detectedMime = detectMimeFromBuffer(firstChunk);
-if (!detectedMime || detectedMime !== data.mimetype) {
-  return reply
-    .status(400)
-    .send({ error: 'File contents do not match declared image type' });
-}
+      const detectedMime = detectMimeFromBuffer(firstChunk);
+      if (!detectedMime || detectedMime !== data.mimetype) {
+        return reply
+          .status(400)
+          .send({ error: 'File contents do not match declared image type' });
+      }
 
-const writeStream = fs.createWriteStream(uploadPath);
+      const writeStream = fs.createWriteStream(uploadPath);
 
-writeStream.write(firstChunk);
+      writeStream.write(firstChunk);
 
-await pipeline(data.file, writeStream);
+      await pipeline(data.file, writeStream);
 
-const dbSavedPath = ['uploads', filename].join('/');
+      const dbSavedPath = ['uploads', filename].join('/');
       const proof = await repo.submitProof(task_id, req.user.id, dbSavedPath);
       req.auditOnResponse = {
         userId: req.user.id,
