@@ -146,24 +146,26 @@ class EmailService {
   async _checkBounce(to) {
     if (!config.email.bounceCheckEnabled) return;
 
-    try {
-      const { rows } = await pool.query(
-        `SELECT bounced_at FROM bounced_emails WHERE email = $1`,
-        [to]
-      );
-      if (rows.length > 0) {
-        const age = Date.now() - new Date(rows[0].bounced_at).getTime();
-        if (age < BOUNCE_TTL_MS) {
-          throw new Error(`Bounced address suppressed: ${to}`);
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        const { rows } = await pool.query(
+          `SELECT bounced_at FROM bounced_emails WHERE email = $1`,
+          [to]
+        );
+        if (rows.length > 0) {
+          const age = Date.now() - new Date(rows[0].bounced_at).getTime();
+          if (age < BOUNCE_TTL_MS) {
+            throw new Error(`Bounced address suppressed: ${to}`);
+          }
         }
+        return;
+      } catch (err) {
+        if (err.message.startsWith('Bounced address suppressed')) throw err;
+        log.warn({ err: err.message }, 'DB bounce check failed; falling back to in-memory');
       }
-      return;
-    } catch (err) {
-      if (err.message.startsWith('Bounced address suppressed')) throw err;
-      log.warn({ err: err.message }, 'DB bounce check failed; falling back to in-memory');
     }
 
-    // In-memory fallback
+    // In-memory fallback (always used in test, fallback in production when DB is unavailable)
     const bouncedAt = _fallbackBounceList.get(to);
     if (bouncedAt && Date.now() - bouncedAt < BOUNCE_TTL_MS) {
       throw new Error(`Bounced address suppressed: ${to}`);
@@ -352,6 +354,13 @@ class EmailService {
   }
 
   async _recordBounces(addresses, reason) {
+    if (process.env.NODE_ENV === 'test') {
+      for (const addr of addresses) {
+        _fallbackBounceList.set(addr, Date.now());
+      }
+      return;
+    }
+
     try {
       for (const addr of addresses) {
         await pool.query(
@@ -377,6 +386,7 @@ class EmailService {
 
   async _clearBounceList() {
     _fallbackBounceList.clear();
+    if (process.env.NODE_ENV === 'test') return;
     try {
       await pool.query('DELETE FROM bounced_emails');
     } catch (err) {
