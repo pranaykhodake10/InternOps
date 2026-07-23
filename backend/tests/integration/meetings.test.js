@@ -280,6 +280,74 @@ describe('Meetings Integration Tests', () => {
       expect(body.pagination).toBeDefined();
       expect(typeof body.pagination.total).toBe('number');
     });
+
+    it('should apply department filter for admin', async () => {
+      const dummyId = '00000000-0000-0000-0000-000000000000';
+      const res = await inject('GET', `/api/v1/meetings?departmentId=${dummyId}`);
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.data.length).toBe(0);
+    });
+
+    it('should ignore department filter override for non-admin', async () => {
+      const deptRes = await pool.query(
+        "INSERT INTO departments (name) VALUES ('Filter Test Dept ' || $1) RETURNING id",
+        [Date.now()]
+      );
+      const testDeptId = deptRes.rows[0].id;
+      
+      const tl = await createUserAsAdmin({
+        email: `filter-tester-${Date.now()}@internops.com`,
+        password: 'Password@123',
+        role: 'TL',
+        departmentId: testDeptId,
+        full_name: 'Filter Tester',
+      });
+
+      const loginRes = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/login',
+        cookies: {
+          'csrf-token': cookies['csrf-token'] || '',
+          'csrf-sid': cookies['csrf-sid'] || '',
+        },
+        headers: {
+          'X-CSRF-Token': csrfToken,
+          'Content-Type': 'application/json',
+        },
+        payload: { email: tl.email, password: 'Password@123' },
+      });
+      const token = JSON.parse(loginRes.body).accessToken;
+      const tCookies = mergeCookies(
+        {},
+        parseSetCookie(loginRes.headers['set-cookie'])
+      );
+
+      const csrfRes = await app.inject({
+        method: 'GET',
+        url: '/api/v1/auth/csrf-token',
+        cookies: tCookies,
+      });
+      const tlCsrfToken = JSON.parse(csrfRes.body).csrfToken;
+      mergeCookies(tCookies, csrfRes.cookies);
+
+      const dummyId = '11111111-1111-1111-1111-111111111111';
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/meetings?departmentId=${dummyId}`,
+        cookies: tCookies,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-CSRF-Token': tlCsrfToken,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      
+      // Cleanup the temp user and dept
+      await pool.query('DELETE FROM users WHERE id = $1', [tl.id]);
+      await pool.query('DELETE FROM departments WHERE id = $1', [testDeptId]);
+    });
   });
 
   describe('GET /api/meetings/:id', () => {
